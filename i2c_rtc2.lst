@@ -1,0 +1,753 @@
+PC     Output      Line
+040000             0001   ;   MOD-RTC2 I2C-Compatible Real Time Clock using DS3231SN
+040000             0002   ;   eZ80 Assembly program for Agon Light 2 used to create:
+040000             0003   ;
+040000             0004   ;   Agon Light - MOD-RTC2
+040000             0005   ;   Written by Tim Gilmore July 2024 in 100% eZ80 Assembly Language
+040000             0006   ;   This is made possibly by the coordination of Learn Agon (Luis)
+040000             0007   ;   with his dedication and persistance to keep learning on the Agon Light 2
+040000             0008   ;   through his videos (https://www.youtube.com/@LearnAgon).
+040000             0009   ;
+040000             0010   ;   Special thanks also goes out to Richard Turnnidge who's Agon Light
+040000             0011   ;   eZ80 Assembly Language videos (https://www.youtube.com/@AgonBits)
+040000             0012   ;   has trained me to create this eZ80 Assembly Language program.
+040000             0013   
+040000             0014   ;   just a note to check my update is uploaded
+040000             0015   
+040000             0016       .assume adl=1       ; ez80 ADL memory mode
+040000             0017       .org $40000         ; load code here
+040000             0018       include "myMacros.inc"
+040000             0001*  ; ---------------------------------------------
+040000             0002*  ;
+040000             0003*  ;	SOME USEFUL MACROS
+040000             0004*  ;
+040000             0005*  ; ---------------------------------------------
+040000             0006*  
+040000             0007*  	macro CLS
+040000             0008*  	ld a, 12
+040000             0009*          rst.lil $10
+040000             0010*  	endmacro
+040000             0011*  
+040000             0012*  	macro CLG
+040000             0013*  	ld a, 16
+040000             0014*  	rst.lil $10
+040000             0015*  	endmacro
+040000             0016*  
+040000             0017*  	macro SET_COLOUR value
+040000             0018*          ld a, 17
+040000             0019*          rst.lil $10
+040000             0020*          ld a, value
+040000             0021*          rst.lil $10
+040000             0022*  	endmacro
+040000             0023*  
+040000             0024*  	macro SET_BG_COLOUR value
+040000             0025*          ld a, 17
+040000             0026*  	rst.lil $10
+040000             0027*          ld a, value
+040000             0028*          add a, 128
+040000             0029*          rst.lil $10
+040000             0030*  	endmacro
+040000             0031*  
+040000             0032*  	macro TAB_TO x,y
+040000             0033*          ld a, 31
+040000             0034*          rst.lil $10
+040000             0035*          ld a, x
+040000             0036*          rst.lil $10
+040000             0037*          ld a, y
+040000             0038*          rst.lil $10
+040000             0039*  	endmacro
+040000             0040*  
+040000             0041*  	macro SET_MODE mode
+040000             0042*          ld a, 22
+040000             0043*          rst.lil $10
+040000             0044*          ld a, mode
+040000             0045*          rst.lil $10
+040000             0046*          ld a, mode
+040000             0047*          rst.lil $10
+040000             0048*  	endmacro
+040000             0049*  
+040000             0050*  	macro MOSCALL arg1
+040000             0051*          ld a, arg1
+040000             0052*          rst.lil $08
+040000             0053*  	endmacro
+040000             0054*  
+040000             0055*          macro SET_MODE_GCOL mode,gcolour
+040000             0056*          ld a, 18
+040000             0057*          rst.lil $10
+040000             0058*          ld a, mode
+040000             0059*          rst.lil $10
+040000             0060*          ld a, gcolour
+040000             0061*          rst.lil $10
+040000             0062*          endmacro
+040000             0063*  
+040000             0064*          macro NON_SCALED_GRAPHICS
+040000             0065*          ld a, 0
+040000             0066*          rst.lil $10
+040000             0067*          ld a, 192
+040000             0068*          rst.lil $10
+040000             0069*          ld a, 0
+040000             0070*          rst.lil $10
+040000             0071*          endmacro
+040000             0072*  
+040000             0019   
+040000 C3 52 01 04 0020       jp start_here       ; jump to start of code
+040004             0021   
+040004 FF FF FF FF 0022       .align 64           ; MOS header
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+040040 4D 4F 53 00 0023       .db "MOS",0,1
+       01          
+040045             0024   
+040045             0025       include "debug_routines.asm"
+040045             0001*  ; ---------------------------------------------
+040045             0002*  ;
+040045             0003*  ;	DEBUG ROUTINES
+040045             0004*  ;
+040045             0005*  ; ---------------------------------------------
+040045             0006*  
+040045             0007*  
+040045             0008*  debugDec:			; debug A to screen as 3 char string at pos BC
+040045 F5          0009*          push af
+040046             0010*  
+040046 3E 1F       0011*  	ld a, 31		; TAB at x,y
+040048 5B D7       0012*  	rst.lil $10
+04004A 78          0013*  	ld a, b			; x=b
+04004B 5B D7       0014*  	rst.lil $10
+04004D 79          0015*  	ld a,c			; y=c
+04004E 5B D7       0016*  	rst.lil $10		; put tab at BC position
+040050 3E 30       0017*          ld a, 48
+040052 32 AA 00 04 0018*          ld (answer),a
+040056 32 AB 00 04 0019*          ld (answer+1),a
+04005A 32 AC 00 04 0020*          ld (answer+2),a		; reset to default before starting
+04005E             0021*  ;is it bigger than 200?
+04005E F1          0022*  	pop af
+04005F             0023*  
+04005F 32 AD 00 04 0024*          ld (base),a		; save
+040063             0025*  
+040063 FE C7       0026*          cp 199
+040065 38 0E       0027*  	jr c,_under200		; not 200+
+040067 D6 C8       0028*  	sub a, 200
+040069 32 AD 00 04 0029*  	ld (base),a		; sub 200 and save
+04006D             0030*  
+04006D 3E 32       0031*  	ld a, 50		; 2 in ascii
+04006F 32 AA 00 04 0032*  	ld (answer),a
+040073 18 12       0033*  	jr _under100
+040075             0034*  
+040075             0035*  _under200:
+040075 FE 63       0036*  	cp 99
+040077 38 0E       0037*  	jr c,_under100		; not 200+
+040079 D6 64       0038*  	sub a, 100
+04007B 32 AD 00 04 0039*  	ld (base),a		; sub 200 and save
+04007F             0040*  
+04007F 3E 31       0041*  	ld a, 49		; 1 in ascii
+040081 32 AA 00 04 0042*  	ld (answer),a
+040085 18 00       0043*  	jr _under100
+040087             0044*  
+040087             0045*  _under100:
+040087 3A AD 00 04 0046*  	ld a, (base)
+04008B 4F          0047*  	ld c, a
+04008C 16 0A       0048*  	ld d, 10
+04008E CD 44 01 04 0049*          call C_Div_D
+040092             0050*  
+040092 C6 30       0051*  	add a, 48
+040094 32 AC 00 04 0052*  	ld (answer + 2),a
+040098             0053*  
+040098 79          0054*  	ld a, c
+040099 C6 30       0055*  	add a, 48
+04009B 32 AB 00 04 0056*  	ld (answer + 1),a
+04009F             0057*  
+04009F 21 AA 00 04 0058*  	ld hl, debugOut		; address of string to use
+0400A3 01 03 00 00 0059*  	ld bc, endDebugOut - debugOut ; length of string
+0400A7 5B DF       0060*  	rst.lil $18
+0400A9 C9          0061*  	ret
+0400AA             0062*  
+0400AA             0063*  debugOut:
+0400AA 30 30 30    0064*  answer:		.db "000"	; string to output
+0400AD             0065*  endDebugOut:
+0400AD             0066*  
+0400AD 00          0067*  base:		.db 0		; used in calculations
+0400AE             0068*  
+0400AE             0069*  
+0400AE             0070*  ; ---------------------------------------------
+0400AE             0071*  
+0400AE             0072*  debugA:				; debug A to screen as HEX byte pair at pos BC
+0400AE F5          0073*  	push af
+0400AF 32 E9 00 04 0074*  	ld (debug_char), a	; store A
+0400B3             0075*  				; first, print 'A=' at TAB 36,0
+0400B3 3E 1F       0076*  	ld a, 31		; TAB at x,y
+0400B5 5B D7       0077*  	rst.lil $10
+0400B7 78          0078*  	ld a, b			; x=b
+0400B8 5B D7       0079*  	rst.lil $10
+0400BA 79          0080*  	ld a, c			; y=c
+0400BB 5B D7       0081*  	rst.lil $10		; put tab at BC position
+0400BD             0082*  
+0400BD 3A E9 00 04 0083*  	ld a, (debug_char)	; get A from store, then split into two nibbles
+0400C1 E6 F0       0084*  	and 11110000b		; get higher nibble
+0400C3 1F          0085*  	rra
+0400C4 1F          0086*  	rra
+0400C5 1F          0087*  	rra
+0400C6 1F          0088*  	rra			; move across to lower nibble
+0400C7 C6 30       0089*  	add a,48		; increase to ascii code range 0-9
+0400C9 FE 3A       0090*  	cp 58			; is A less than 10? (58+)
+0400CB 38 02       0091*  	jr c, nextbd1		; carry on if less
+0400CD C6 07       0092*  	add a, 7		; add to get 'A' char if larger than 10
+0400CF             0093*  nextbd1:
+0400CF 5B D7       0094*  	rst.lil $10		; print the A char
+0400D1             0095*  
+0400D1 3A E9 00 04 0096*  	ld a, (debug_char)	; get A back again
+0400D5 E6 0F       0097*  	and 00001111b		; now just get lower nibble
+0400D7 C6 30       0098*  	add a,48		; increase to ascii code range 0-9
+0400D9 FE 3A       0099*  	cp 58			; is A less than 10 (58+)
+0400DB DA E1 00 04 0100*  	jp c, nextbd2		; carry on if less
+0400DF C6 07       0101*  	add a, 7		; add to get 'A' char if larger than 10
+0400E1             0102*  nextbd2:
+0400E1 5B D7       0103*  	rst.lil $10		; print the A char
+0400E3             0104*  
+0400E3 3A E9 00 04 0105*  	ld a, (debug_char)
+0400E7 F1          0106*  	pop af
+0400E8 C9          0107*  	ret			; head back
+0400E9             0108*  
+0400E9 00          0109*  debug_char: 	.db 0
+0400EA             0110*  
+0400EA             0111*  
+0400EA             0112*  ; ---------------------------------------------
+0400EA             0113*  
+0400EA             0114*  printBin:
+0400EA             0115*  				; take A as number and print out as binary, B,C as X,Y position
+0400EA             0116*  				; take D as number of bits to do
+0400EA F5          0117*  	push af
+0400EB             0118*  
+0400EB 3E 1F       0119*  	ld a, 31		; TAB at x,y
+0400ED 5B D7       0120*  	rst.lil $10
+0400EF 78          0121*  	ld a, b			; x=b
+0400F0 5B D7       0122*  	rst.lil $10
+0400F2 79          0123*  	ld a,c			; y=c
+0400F3 5B D7       0124*  	rst.lil $10		; put tab at BC position
+0400F5             0125*  
+0400F5 F1          0126*  	pop af
+0400F6             0127*  
+0400F6             0128*  
+0400F6 42          0129*  	ld b, d
+0400F7 21 12 01 04 0130*  	ld hl, binString
+0400FB             0131*  rpt:
+0400FB 36 30       0132*  	ld (hl), 48 	; ASCII 0 is 48, 1 is 49 ; reset first
+0400FD             0133*  
+0400FD CB 7F       0134*  	bit 7, a
+0400FF 28 02       0135*  	jr z, nxt
+040101 36 31       0136*  	ld (hl), 49
+040103             0137*  nxt:
+040103 23          0138*  	inc hl	; next position in string
+040104 17          0139*  	rla
+040105 10 F4       0140*  	djnz rpt
+040107             0141*  
+040107             0142*  
+040107 21 12 01 04 0143*  	ld hl, printStr
+04010B 01 08 00 00 0144*  	ld bc, endPrintStr - printStr
+04010F             0145*  
+04010F 5B DF       0146*  	rst.lil $18
+040111             0147*  
+040111             0148*  
+040111 C9          0149*  	ret
+040112             0150*  
+040112             0151*  			; print binary
+040112             0152*  printStr:
+040112 30 30 30 30 0153*  binString:	.db 	"00000000"
+       30 30 30 30 
+04011A             0154*  endPrintStr:
+04011A             0026       include "delay_routines.asm"
+04011A             0001*  ; ---------------------------------------------
+04011A             0002*  ;
+04011A             0003*  ;	DELAY ROUTINES
+04011A             0004*  ;
+04011A             0005*  ; ---------------------------------------------
+04011A             0006*  
+04011A             0007*  ; routine waits a fixed time, then returns
+04011A             0008*  
+04011A             0009*  multiPurposeDelay:
+04011A C5          0010*  	push bc
+04011B             0011*  
+04011B             0012*  				; arrive with A =  the delay byte. One bit to be set only.
+04011B 47          0013*  	ld b, a
+04011C             0014*  	MOSCALL $08             ; get IX pointer to sysvars
+04011C 3E 08       0001*M         ld a, arg1
+04011E 5B CF       0002*M         rst.lil $08
+040120             0015*  
+040120             0016*  waitLoop:
+040120             0017*  
+040120 DD 7E 00    0018*  	ld a, (ix + 0)          ; ix+0h is lowest byte of clock timer
+040123             0019*  
+040123             0020*  				; need to check if bit set is same as last time we checked.
+040123             0021*  				;   bit 0 - changes 128 times per second
+040123             0022*  				;   bit 1 - changes 64 times per second
+040123             0023*  				;   bit 2 - changes 32 times per second
+040123             0024*  				;   bit 3 - changes 16 times per second
+040123             0025*  
+040123             0026*  				;   bit 4 - changes 8 times per second
+040123             0027*  				;   bit 5 - changes 4 times per second
+040123             0028*  				;   bit 6 - changes 2 times per second
+040123             0029*  				;   bit 7 - changes 1 times per second
+040123             0030*  				; eg. and 00000010b           ; check 1 bit only
+040123 A0          0031*  	and b
+040124 4F          0032*  	ld c,a
+040125 3A 33 01 04 0033*     	ld a, (oldTimeStamp)
+040129 B9          0034*    	cp c                    ; is A same as last value?
+04012A 28 F4       0035*  	jr z, waitLoop   	; loop here if it is
+04012C 79          0036*   	ld a, c
+04012D 32 33 01 04 0037*   	ld (oldTimeStamp), a    ; set new value
+040131             0038*  
+040131 C1          0039*   	pop bc
+040132 C9          0040*   	ret
+040133             0041*  
+040133 00          0042*  oldTimeStamp:   .db 00h
+040134             0043*  
+040134             0044*  ; ---------------------------------------------
+040134             0045*  
+040134             0046*  miniDelay:
+040134 C5          0047*  	push bc
+040135 01 00 00 00 0048*  	ld bc, 0
+040139 06 0A       0049*  	ld b,10
+04013B             0050*  miniLoop:
+04013B             0051*  
+04013B 10 FE       0052*  	djnz miniLoop
+04013D C1          0053*  	pop bc
+04013E C9          0054*  	ret
+04013F             0055*  
+04013F             0056*  
+04013F             0027       include "math_routines.asm"
+04013F             0001*  ; ---------------------------------------------
+04013F             0002*  ;
+04013F             0003*  ;	A SET OF MATHS ROUTINES TO INCLUDE
+04013F             0004*  ;
+04013F             0005*  ; ---------------------------------------------
+04013F             0006*  
+04013F             0007*  
+04013F             0008*  get_ABS_a:	; returns A as ABS(A)
+04013F B7          0009*  	or a
+040140 F0          0010*  	ret p
+040141 ED 44       0011*  	neg
+040143 C9          0012*  	ret
+040144             0013*  
+040144             0014*  ; ---------------------------------------------
+040144             0015*  
+040144             0016*  C_Div_D:
+040144             0017*  ;Inputs
+040144             0018*  ;   C is the numerator
+040144             0019*  ;   D is the denominator
+040144             0020*  ;Outputs
+040144             0021*  ;   A is the remainder
+040144             0022*  ;   B is 0
+040144             0023*  ;   C is the result of C/D
+040144             0024*  ;   D,E,H,L are not changed
+040144             0025*  ;
+040144 06 08       0026*      ld b, 8
+040146 AF          0027*      xor a
+040147 CB 21       0028*      sla c
+040149 17          0029*      rla
+04014A BA          0030*      cp d
+04014B 38 02       0031*      jr c,$+4
+04014D 0C          0032*      inc c
+04014E 92          0033*      sub d
+04014F 10 F6       0034*      djnz $-8
+040151 C9          0035*      ret
+040152             0036*  
+040152             0037*  ; ---------------------------------------------
+040152             0038*  
+040152             0028   
+040152             0029   start_here:
+040152             0030   
+040152 F5          0031       push af             ; store all the registers
+040153 C5          0032       push bc
+040154 D5          0033       push de
+040155 DD E5       0034       push ix
+040157 FD E5       0035       push iy
+040159             0036   
+040159             0037   ; ------------------
+040159             0038   ; This is our actual code in ez80 assembly
+040159             0039   
+040159             0040   
+040159             0041       CLS
+040159 3E 0C       0001M  	ld a, 12
+04015B 5B D7       0002M          rst.lil $10
+04015D             0042   
+04015D             0043   
+04015D 21 2A 03 04 0044       ld hl, VDUdata
+040161 01 24 00 00 0045       ld bc, endVDUdata - VDUdata
+040165 5B DF       0046       rst.lil $18
+040167             0047   
+040167             0048   
+040167 CD 0C 03 04 0049       call hidecursor     ; hide the cursor
+04016B             0050   
+04016B             0051   ; need to setup i2c port
+04016B             0052   
+04016B CD A0 01 04 0053       call open_i2c
+04016F             0054   
+04016F             0055   
+04016F             0056   
+04016F             0057   
+04016F             0058   LOOP_HERE:
+04016F             0059       MOSCALL $1E          ; get IX pointer to keyvals, currently pressed keys
+04016F 3E 1E       0001M          ld a, arg1
+040171 5B CF       0002M          rst.lil $08
+040173 DD 7E 0E    0060       ld a, (ix + $0E)
+040176 CB 47       0061       bit 0, a
+040178 C2 88 01 04 0062       jp nz, EXIT_HERE            ; ESC key to exit
+04017C             0063   
+04017C             0064   
+04017C 3E 04       0065       ld a, 00000100b		; changes ? times a second
+04017E CD 1A 01 04 0066       call multiPurposeDelay      ; wait a bit
+040182             0067   
+040182             0068   
+040182 CD 5E 02 04 0069       call read_i2c
+040186             0070   
+040186 18 E7       0071       jr LOOP_HERE
+040188             0072   
+040188             0073   
+040188             0074   ; ------------------
+040188             0075   
+040188             0076   EXIT_HERE:
+040188             0077   
+040188             0078   ; need to close i2c port
+040188 CD 07 03 04 0079       call close_i2c
+04018C             0080       CLS			; Clear the screen when exiting
+04018C 3E 0C       0001M  	ld a, 12
+04018E 5B D7       0002M          rst.lil $10
+040190 CD 1B 03 04 0081       call showcursor
+040194             0082   
+040194 FD E1       0083       pop iy              ; Pop all registers back from the stack
+040196 DD E1       0084       pop ix
+040198 D1          0085       pop de
+040199 C1          0086       pop bc
+04019A F1          0087       pop af
+04019B 21 00 00 00 0088       ld hl,0             ; Load the MOS API return code (0) for no errors.
+04019F             0089   
+04019F C9          0090       ret                 ; Return to MOS
+0401A0             0091   
+0401A0             0092   
+0401A0             0093   ; ------------------
+0401A0             0094   
+0401A0             0095   open_i2c:
+0401A0             0096   
+0401A0 0E 03       0097       ld c, 3                     ; making assumption based on Jeroen's code
+0401A2             0098       MOSCALL $1F                 ; open i2c
+0401A2 3E 1F       0001M          ld a, arg1
+0401A4 5B CF       0002M          rst.lil $08
+0401A6             0099   
+0401A6             0100   
+0401A6             0101   ; write to Address Pointer register and data buffer
+0401A6             0102   
+0401A6             0103   ;   seconds
+0401A6             0104   
+0401A6 0E 68       0105       ld c, $68   		; i2c address ($68)
+0401A8 06 02       0106       ld b, 2			; number of bytes to send
+0401AA 21 6E 03 04 0107       ld hl, i2c_write_buffer
+0401AE             0108   
+0401AE 36 00       0109       ld (hl), $00		; 1st byte ($00) points to SECONDS address reg
+0401B0 23          0110       inc hl
+0401B1 36 47       0111       ld (hl), 01000111b		; 2nd byte represents 47 seconds in BCD format
+0401B3 21 6E 03 04 0112       ld hl, i2c_write_buffer
+0401B7             0113       MOSCALL $21
+0401B7 3E 21       0001M          ld a, arg1
+0401B9 5B CF       0002M          rst.lil $08
+0401BB             0114   
+0401BB             0115   ;   minutes
+0401BB             0116   
+0401BB 3E 02       0117       ld a, 00000010b
+0401BD CD 1A 01 04 0118       call multiPurposeDelay
+0401C1             0119   
+0401C1 0E 68       0120       ld c, $68   		; i2c address ($68)
+0401C3 06 02       0121       ld b, 2			; number of bytes to send
+0401C5 21 6E 03 04 0122       ld hl, i2c_write_buffer
+0401C9             0123   
+0401C9 36 01       0124       ld (hl), $01		; 1st byte ($01) points to MINUTES address reg
+0401CB 23          0125       inc hl
+0401CC 36 59       0126       ld (hl), 01011001b		; 2nd byte represents 59 minutes in BCD format
+0401CE 21 6E 03 04 0127       ld hl, i2c_write_buffer
+0401D2             0128       MOSCALL $21
+0401D2 3E 21       0001M          ld a, arg1
+0401D4 5B CF       0002M          rst.lil $08
+0401D6             0129   
+0401D6             0130   ;   hours
+0401D6             0131   
+0401D6 3E 02       0132       ld a, 00000010b
+0401D8 CD 1A 01 04 0133       call multiPurposeDelay
+0401DC             0134   
+0401DC 0E 68       0135       ld c, $68   		; i2c address ($68)
+0401DE 06 02       0136       ld b, 2			; number of bytes to send
+0401E0 21 6E 03 04 0137       ld hl, i2c_write_buffer
+0401E4             0138   
+0401E4 36 02       0139       ld (hl), $02		; 1st byte ($02) points to HOURS address reg
+0401E6 23          0140       inc hl
+0401E7 36 12       0141       ld (hl), 00010010b		; 2nd byte represents 12 hours in BCD format
+0401E9 21 6E 03 04 0142       ld hl, i2c_write_buffer
+0401ED             0143       MOSCALL $21
+0401ED 3E 21       0001M          ld a, arg1
+0401EF 5B CF       0002M          rst.lil $08
+0401F1             0144   
+0401F1             0145   
+0401F1             0146   ;   day of week
+0401F1             0147   
+0401F1 3E 02       0148       ld a, 00000010b
+0401F3 CD 1A 01 04 0149       call multiPurposeDelay
+0401F7             0150   
+0401F7 0E 68       0151       ld c, $68   		; i2c address ($68)
+0401F9 06 02       0152       ld b, 2			; number of bytes to send
+0401FB 21 6E 03 04 0153       ld hl, i2c_write_buffer
+0401FF             0154   
+0401FF 36 03       0155       ld (hl), $03		; 1st byte ($03) points to DAY address reg
+040201 23          0156       inc hl
+040202 36 02       0157       ld (hl), 00000010b		; 2nd byte represents the 2nd day/week in BCD format
+040204 21 6E 03 04 0158       ld hl, i2c_write_buffer
+040208             0159       MOSCALL $21
+040208 3E 21       0001M          ld a, arg1
+04020A 5B CF       0002M          rst.lil $08
+04020C             0160   
+04020C             0161   ;   day date
+04020C             0162   
+04020C 3E 02       0163       ld a, 00000010b
+04020E CD 1A 01 04 0164       call multiPurposeDelay
+040212             0165   
+040212 0E 68       0166       ld c, $68   		; i2c address ($68)
+040214 06 02       0167       ld b, 2			; number of bytes to send
+040216 21 6E 03 04 0168       ld hl, i2c_write_buffer
+04021A             0169   
+04021A 36 04       0170       ld (hl), $04		; 1st byte ($04) points to DATE address reg
+04021C 23          0171       inc hl
+04021D 36 27       0172       ld (hl), 00100111b		; 2nd byte represents the 27th day/month in BCD format
+04021F 21 6E 03 04 0173       ld hl, i2c_write_buffer
+040223             0174       MOSCALL $21
+040223 3E 21       0001M          ld a, arg1
+040225 5B CF       0002M          rst.lil $08
+040227             0175   
+040227             0176   ;   month
+040227             0177   
+040227 3E 02       0178       ld a, 00000010b
+040229 CD 1A 01 04 0179       call multiPurposeDelay
+04022D             0180   
+04022D 0E 68       0181       ld c, $68   		; i2c address ($68)
+04022F 06 02       0182       ld b, 2			; number of bytes to send
+040231 21 6E 03 04 0183       ld hl, i2c_write_buffer
+040235             0184   
+040235 36 05       0185       ld (hl), $05		; 1st byte ($05) points to MONTH address reg
+040237 23          0186       inc hl
+040238 36 10       0187       ld (hl), 00010000b		; 2nd byte represents the 10th month in BCD format
+04023A 21 6E 03 04 0188       ld hl, i2c_write_buffer
+04023E             0189       MOSCALL $21
+04023E 3E 21       0001M          ld a, arg1
+040240 5B CF       0002M          rst.lil $08
+040242             0190   
+040242             0191   ;   year
+040242             0192   
+040242 3E 02       0193       ld a, 00000010b
+040244 CD 1A 01 04 0194       call multiPurposeDelay
+040248             0195   
+040248 0E 68       0196       ld c, $68   		; i2c address ($68)
+04024A 06 02       0197       ld b, 2			; number of bytes to send
+04024C 21 6E 03 04 0198       ld hl, i2c_write_buffer
+040250             0199   
+040250 36 06       0200       ld (hl), $06		; 1st byte ($06) points to YEAR address reg
+040252 23          0201       inc hl
+040253 36 00       0202       ld (hl), 0 ;00100100b		; 2nd byte represents the 24th year in BCD format
+040255 21 6E 03 04 0203       ld hl, i2c_write_buffer
+040259             0204       MOSCALL $21
+040259 3E 21       0001M          ld a, arg1
+04025B 5B CF       0002M          rst.lil $08
+04025D             0205   
+04025D             0206   
+04025D             0207   
+04025D C9          0208       ret
+04025E             0209   
+04025E             0210   read_i2c:
+04025E             0211   
+04025E             0212       ; ask for data
+04025E             0213   
+04025E 0E 68       0214       ld c, $68   		; i2c address ($68)
+040260 06 01       0215       ld b,1			; number of bytes to send
+040262 21 6E 03 04 0216       ld hl, i2c_write_buffer
+040266 36 00       0217       ld (hl), $00
+040268             0218       MOSCALL $21
+040268 3E 21       0001M          ld a, arg1
+04026A 5B CF       0002M          rst.lil $08
+04026C             0219   
+04026C 3E 04       0220       ld a, 00000100b
+04026E CD 1A 01 04 0221       call multiPurposeDelay
+040272             0222   
+040272 0E 68       0223       ld c, $68
+040274 06 07       0224       ld b, 7
+040276 21 4E 03 04 0225       ld hl, i2c_read_buffer
+04027A             0226       MOSCALL $22
+04027A 3E 22       0001M          ld a, arg1
+04027C 5B CF       0002M          rst.lil $08
+04027E             0227   
+04027E 3E 02       0228       ld a, 00000010b
+040280 CD 1A 01 04 0229       call multiPurposeDelay
+040284             0230   
+040284             0231       ;display the data
+040284             0232   
+040284 21 4E 03 04 0233       ld hl, i2c_read_buffer
+040288             0234   
+040288 7E          0235       ld a, (hl)
+040289 32 8E 03 04 0236       ld (SECONDS), a
+04028D 23          0237       inc hl
+04028E             0238   
+04028E 7E          0239       ld a, (hl)
+04028F 32 8F 03 04 0240       ld (MINUTES), a
+040293 23          0241       inc hl
+040294             0242   
+040294 7E          0243       ld a, (hl)
+040295 32 90 03 04 0244       ld (HOURS), a
+040299 23          0245       inc hl
+04029A             0246   
+04029A 7E          0247       ld a, (hl)
+04029B 32 92 03 04 0248       ld (DAY), a
+04029F 23          0249       inc hl
+0402A0             0250   
+0402A0 7E          0251       ld a, (hl)
+0402A1 32 93 03 04 0252       ld (DATE), a
+0402A5 23          0253       inc hl
+0402A6             0254   
+0402A6 7E          0255       ld a, (hl)
+0402A7 32 94 03 04 0256       ld (MONTH), a
+0402AB 23          0257       inc hl
+0402AC             0258   
+0402AC 7E          0259       ld a, (hl)
+0402AD 32 95 03 04 0260       ld (YEAR), a
+0402B1 23          0261       inc hl
+0402B2             0262   
+0402B2             0263   
+0402B2             0264   
+0402B2             0265   
+0402B2             0266   
+0402B2             0267   
+0402B2 06 17       0268       ld b, 23
+0402B4 0E 01       0269       ld c, 1
+0402B6 3A 8E 03 04 0270       ld a, (SECONDS)
+0402BA CD AE 00 04 0271       call debugA
+0402BE             0272   
+0402BE 06 14       0273       ld b, 20
+0402C0 0E 01       0274       ld c, 1
+0402C2 3A 8F 03 04 0275       ld a, (MINUTES)
+0402C6 CD AE 00 04 0276       call debugA
+0402CA             0277   
+0402CA 06 11       0278       ld b, 17
+0402CC 0E 01       0279       ld c, 1
+0402CE 3A 90 03 04 0280       ld a, (HOURS)
+0402D2 CD AE 00 04 0281       call debugA
+0402D6             0282   
+0402D6             0283   
+0402D6 06 1E       0284       ld b, 30
+0402D8 0E 01       0285       ld c, 1
+0402DA 3A 92 03 04 0286       ld a, (DAY)
+0402DE CD AE 00 04 0287       call debugA
+0402E2             0288   
+0402E2 06 24       0289       ld b, 36
+0402E4 0E 01       0290       ld c, 1
+0402E6 3A 93 03 04 0291       ld a, (DATE)
+0402EA CD AE 00 04 0292       call debugA
+0402EE             0293   
+0402EE 06 21       0294       ld b, 33
+0402F0 0E 01       0295       ld c, 1
+0402F2 3A 94 03 04 0296       ld a, (MONTH)
+0402F6 CD AE 00 04 0297       call debugA
+0402FA             0298   
+0402FA 06 27       0299       ld b, 39
+0402FC 0E 01       0300       ld c, 1
+0402FE 3A 95 03 04 0301       ld a, (YEAR)
+040302 CD AE 00 04 0302       call debugA
+040306             0303   
+040306             0304   
+040306             0305   
+040306 C9          0306       ret
+040307             0307   
+040307             0308   
+040307             0309   
+040307             0310   close_i2c:
+040307             0311   
+040307             0312       MOSCALL $20
+040307 3E 20       0001M          ld a, arg1
+040309 5B CF       0002M          rst.lil $08
+04030B             0313   
+04030B C9          0314       ret
+04030C             0315   
+04030C             0316    ; ------------------
+04030C             0317   
+04030C             0318   
+04030C             0319   hidecursor:
+04030C F5          0320       push af
+04030D 3E 17       0321       ld a, 23
+04030F 5B D7       0322       rst.lil $10
+040311 3E 01       0323       ld a, 1
+040313 5B D7       0324       rst.lil $10
+040315 3E 00       0325       ld a,0
+040317 5B D7       0326       rst.lil $10                 ; VDU 23,1,0
+040319 F1          0327       pop af
+04031A C9          0328       ret
+04031B             0329   
+04031B             0330   
+04031B             0331   showcursor:
+04031B F5          0332       push af
+04031C 3E 17       0333       ld a, 23
+04031E 5B D7       0334       rst.lil $10
+040320 3E 01       0335       ld a, 1
+040322 5B D7       0336       rst.lil $10
+040324 3E 01       0337       ld a,1
+040326 5B D7       0338       rst.lil $10                 ; VDU 23,1,1
+040328 F1          0339       pop af
+040329 C9          0340       ret
+04032A             0341   
+04032A             0342    ; ------------------
+04032A             0343   
+04032A             0344   VDUdata:
+04032A             0345   
+04032A 1F 0F 1B 50 0346       .db 31, 15,27, "Press Esc to exit"
+       72 65 73 73 
+       20 45 73 63 
+       20 74 6F 20 
+       65 78 69 74 
+04033E 1F 13 01 3A 0347       .db 31, 19,1, ":"
+040342 1F 16 01 3A 0348       .db 31, 22,1, ":"
+040346 1F 23 01 2F 0349       .db 31, 35,1, "/"
+04034A 1F 26 01 2F 0350       .db 31, 38,1, "/"
+04034E             0351   endVDUdata:
+04034E             0352   
+04034E             0353   
+04034E             0354   
+04034E             0355   i2c_read_buffer:		;i2c useage - keep
+04034E 00 00 00 00 0356       .ds 32,0
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+04036E             0357   
+04036E             0358   i2c_write_buffer:
+04036E 00 00 00 00 0359       .ds 32,0
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+04038E             0360   
+04038E 00          0361   SECONDS:  	.db     0	;store RTC values
+04038F 00          0362   MINUTES:        .db     0
+040390 00          0363   HOURS:		.db	0
+040391 00          0364   HOURSMODE:	.db	0
+040392 00          0365   DAY:		.db	0
+040393 00          0366   DATE:		.db	0
+040394 00          0367   MONTH:		.db	0
+040395 00          0368   YEAR:		.db	0

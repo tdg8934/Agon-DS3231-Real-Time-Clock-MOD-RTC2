@@ -5,66 +5,66 @@
 ; ---------------------------------------------
 
 
-debugDec:			; debug A to screen as 3 char string at pos BC
-        push af
+; debugDec:			; debug A to screen as 3 char string at pos BC
+;         push af
         
-	ld a, 31		; TAB at x,y
-	rst.lil $10
-	ld a, b			; x=b
-	rst.lil $10
-	ld a,c			; y=c
-	rst.lil $10		; put tab at BC position   
-        ld a, 48
-        ld (answer),a
-        ld (answer+1),a
-        ld (answer+2),a		; reset to default before starting
-;is it bigger than 200?
-	pop af
+; 	ld a, 31		; TAB at x,y
+; 	rst.lil $10
+; 	ld a, b			; x=b
+; 	rst.lil $10
+; 	ld a,c			; y=c
+; 	rst.lil $10		; put tab at BC position   
+;         ld a, 48
+;         ld (answer),a
+;         ld (answer+1),a
+;         ld (answer+2),a		; reset to default before starting
+; ;is it bigger than 200?
+; 	pop af
 
-        ld (base),a		; save
+;         ld (base),a		; save
 
-        cp 199
-	jr c,_under200		; not 200+
-	sub a, 200
-	ld (base),a		; sub 200 and save
+;         cp 199
+; 	jr c,_under200		; not 200+
+; 	sub a, 200
+; 	ld (base),a		; sub 200 and save
 
-	ld a, 50		; 2 in ascii
-	ld (answer),a
-	jr _under100
+; 	ld a, 50		; 2 in ascii
+; 	ld (answer),a
+; 	jr _under100
 
-_under200:
-	cp 99
-	jr c,_under100		; not 200+
-	sub a, 100
-	ld (base),a		; sub 200 and save
+; _under200:
+; 	cp 99
+; 	jr c,_under100		; not 200+
+; 	sub a, 100
+; 	ld (base),a		; sub 200 and save
 
-	ld a, 49		; 1 in ascii
-	ld (answer),a
-	jr _under100
+; 	ld a, 49		; 1 in ascii
+; 	ld (answer),a
+; 	jr _under100
 
-_under100:
-	ld a, (base)
-	ld c, a
-	ld d, 10
-        call C_Div_D
+; _under100:
+; 	ld a, (base)
+; 	ld c, a
+; 	ld d, 10
+;         call C_Div_D
 
-	add a, 48
-	ld (answer + 2),a
+; 	add a, 48
+; 	ld (answer + 2),a
 	
-	ld a, c
-	add a, 48
-	ld (answer + 1),a
+; 	ld a, c
+; 	add a, 48
+; 	ld (answer + 1),a
 
-	ld hl, debugOut		; address of string to use
-	ld bc, endDebugOut - debugOut ; length of string
-	rst.lil $18
-	ret
+; 	ld hl, debugOut		; address of string to use
+; 	ld bc, endDebugOut - debugOut ; length of string
+; 	rst.lil $18
+; 	ret
 
-debugOut:
-answer:		.db "000"	; string to output
-endDebugOut:	
+; debugOut:
+; answer:		.db "000"	; string to output
+; endDebugOut:	
 
-base:		.db 0		; used in calculations
+; base:		.db 0		; used in calculations
 
 
 ; ---------------------------------------------

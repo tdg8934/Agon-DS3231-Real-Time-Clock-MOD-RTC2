@@ -11,7 +11,8 @@
 ;   eZ80 Assembly Language videos (https://www.youtube.com/@AgonBits) 
 ;   has trained me to create this eZ80 Assembly Language program.
   
-;   just a note to check my update is uploaded
+;   This version is just a clock, it does not setthe RTC, only reads time
+;   Modified by Richard Turnnidge
 
     .assume adl=1       ; ez80 ADL memory mode
     .org $40000         ; load code here
@@ -56,13 +57,13 @@ start_here:
 
     
 LOOP_HERE:
-    MOSCALL $1E          ; get IX pointer to keyvals, currently pressed keys
+    MOSCALL $1E                 ; get IX pointer to keyvals, currently pressed keys
     ld a, (ix + $0E)    
     bit 0, a    
     jp nz, EXIT_HERE            ; ESC key to exit
 
 
-    ld a, 00000100b		; changes ? times a second
+    ld a, 00000100b		        ; changes ? times a second
     call multiPurposeDelay      ; wait a bit
     
    
@@ -75,9 +76,9 @@ LOOP_HERE:
 
 EXIT_HERE:
 
-; need to close i2c port
+                        ; need to close i2c port
     call close_i2c
-    CLS			; Clear the screen when exiting
+    CLS			        ; Clear the screen when exiting
     call showcursor
 
     pop iy              ; Pop all registers back from the stack
@@ -97,123 +98,14 @@ open_i2c:
     ld c, 3                     ; making assumption based on Jeroen's code
     MOSCALL $1F                 ; open i2c     			 
    
-
-;   write to Address Pointer register and data buffer
-;   this section opens i2c and sets the default time
-
-;   set seconds
-
-    ld c, $68   		; i2c address ($68)
-    ld b, 2			; number of bytes to send
-    ld hl, i2c_write_buffer
-
-    ld (hl), $00		; 1st byte ($00) points to SECONDS address reg
-    inc hl   
-    ld (hl), 01000111b		; 2nd byte represents 47 seconds in BCD format 
-    ld hl, i2c_write_buffer
-    MOSCALL $21
-
-;   set minutes
-
-    ld a, 00000010b
-    call multiPurposeDelay
-
-    ld c, $68   		; i2c address ($68)
-    ld b, 2			; number of bytes to send
-    ld hl, i2c_write_buffer
-
-    ld (hl), $01		; 1st byte ($01) points to MINUTES address reg
-    inc hl   
-    ld (hl), 01011001b		; 2nd byte represents 59 minutes in BCD format 
-    ld hl, i2c_write_buffer
-    MOSCALL $21
-
-;   set hours
-
-    ld a, 00000010b
-    call multiPurposeDelay
-
-    ld c, $68   		; i2c address ($68)
-    ld b, 2			; number of bytes to send
-    ld hl, i2c_write_buffer
-
-    ld (hl), $02		; 1st byte ($02) points to HOURS address reg
-    inc hl   
-    ld (hl), 00010010b		; 2nd byte represents 12 hours in BCD format 
-    ld hl, i2c_write_buffer     
-    MOSCALL $21
-
-
-;   set day of week
-
-    ld a, 00000010b
-    call multiPurposeDelay
-
-    ld c, $68   		; i2c address ($68)
-    ld b, 2			; number of bytes to send
-    ld hl, i2c_write_buffer
-
-    ld (hl), $03		; 1st byte ($03) points to DAY address reg
-    inc hl   
-    ld (hl), 00000010b		; 2nd byte represents the 2nd day/week in BCD format 
-    ld hl, i2c_write_buffer     
-    MOSCALL $21
-
-;   set day date
-
-    ld a, 00000010b
-    call multiPurposeDelay
-
-    ld c, $68   		; i2c address ($68)
-    ld b, 2			; number of bytes to send
-    ld hl, i2c_write_buffer
-
-    ld (hl), $04		; 1st byte ($04) points to DATE address reg
-    inc hl   
-    ld (hl), 00100111b		; 2nd byte represents the 27th day/month in BCD format 
-    ld hl, i2c_write_buffer     
-    MOSCALL $21
-
-;   set month
-
-    ld a, 00000010b
-    call multiPurposeDelay
-
-    ld c, $68   		; i2c address ($68)
-    ld b, 2			; number of bytes to send
-    ld hl, i2c_write_buffer
-
-    ld (hl), $05		; 1st byte ($05) points to MONTH address reg
-    inc hl   
-    ld (hl), 00010000b		; 2nd byte represents the 10th month in BCD format 
-    ld hl, i2c_write_buffer     
-    MOSCALL $21
-
-;   set year
-
-    ld a, 00000010b
-    call multiPurposeDelay
-
-    ld c, $68   		; i2c address ($68)
-    ld b, 2			; number of bytes to send
-    ld hl, i2c_write_buffer
-
-    ld (hl), $06		; 1st byte ($06) points to YEAR address reg
-    inc hl   
-    ld (hl), 0 ;00100100b		; 2nd byte represents the 24th year in BCD format 
-    ld hl, i2c_write_buffer     
-    MOSCALL $21
-
-
-
     ret 
 
 read_i2c:
 
     ; ask for data
 
-    ld c, $68   		; i2c address ($68)
-    ld b,1			; number of bytes to send
+    ld c, $68   		          ; i2c address ($68)
+    ld b,1			              ; number of bytes to send
     ld hl, i2c_write_buffer
     ld (hl), $00
     MOSCALL $21
@@ -245,9 +137,9 @@ read_i2c:
     ld (HOURS), a
     inc hl
 
-    ld a, (hl)
-    ld (DAY), a
-    inc hl
+     ld a, (hl)
+     ld (DAY), a
+     inc hl
 
     ld a, (hl)
     ld (DATE), a
@@ -260,10 +152,6 @@ read_i2c:
     ld a, (hl)
     ld (YEAR), a
     inc hl
-
-    
-
-
 
 
     ld b, 23
@@ -344,6 +232,7 @@ showcursor:
 
 VDUdata:
 
+    .db 31, 15,25, "CLOCK - Date is in US format"
     .db 31, 15,27, "Press Esc to exit"
     .db 31, 19,1, ":"
     .db 31, 22,1, ":"
@@ -360,10 +249,10 @@ i2c_write_buffer:
     .ds 32,0
 
 SECONDS:  	.db     0	;store RTC values
-MINUTES:        .db     0
-HOURS:		.db	0
-HOURSMODE:	.db	0
-DAY:		.db	0
-DATE:		.db	0
-MONTH:		.db	0
-YEAR:		.db	0
+MINUTES:    .db     0
+HOURS:		.db	    0
+HOURSMODE:	.db	    0
+DAY:		.db	    0
+DATE:		.db  	0
+MONTH:		.db 	0
+YEAR:		.db  	0
