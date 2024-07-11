@@ -1,0 +1,467 @@
+PC     Output      Line
+040000             0001   ;
+040000             0002   ; Title:        setrtc
+040000             0003   ; Author:       Richard Turnnidge 2024
+040000             0004   ; A MOSlet to set the time of a RTC module
+040000             0005   ;
+040000             0006   ; Usage:
+040000             0007   ;         *setrtc seconds minutes hours day date month year
+040000             0008   ;
+040000             0009   ;   eg.    *setrtc 0 23 18 2 21 9 24
+040000             0010   ;
+040000             0011   ;   this version is more compact and efficient at sending i2c data
+040000             0012   ;
+040000             0013   
+040000             0014       include "myMacros.inc"
+040000             0001*  ; ---------------------------------------------
+040000             0002*  ;
+040000             0003*  ;	SOME USEFUL MACROS
+040000             0004*  ;
+040000             0005*  ; ---------------------------------------------
+040000             0006*  
+040000             0007*  	macro CLS
+040000             0008*  	ld a, 12
+040000             0009*          rst.lil $10
+040000             0010*  	endmacro
+040000             0011*  
+040000             0012*  	macro CLG
+040000             0013*  	ld a, 16
+040000             0014*  	rst.lil $10
+040000             0015*  	endmacro
+040000             0016*  
+040000             0017*  	macro SET_COLOUR value
+040000             0018*          ld a, 17
+040000             0019*          rst.lil $10
+040000             0020*          ld a, value
+040000             0021*          rst.lil $10
+040000             0022*  	endmacro
+040000             0023*  
+040000             0024*  	macro SET_BG_COLOUR value
+040000             0025*          ld a, 17
+040000             0026*  	rst.lil $10
+040000             0027*          ld a, value
+040000             0028*          add a, 128
+040000             0029*          rst.lil $10
+040000             0030*  	endmacro
+040000             0031*  
+040000             0032*  	macro TAB_TO x,y
+040000             0033*          ld a, 31
+040000             0034*          rst.lil $10
+040000             0035*          ld a, x
+040000             0036*          rst.lil $10
+040000             0037*          ld a, y
+040000             0038*          rst.lil $10
+040000             0039*  	endmacro
+040000             0040*  
+040000             0041*  	macro SET_MODE mode
+040000             0042*          ld a, 22
+040000             0043*          rst.lil $10
+040000             0044*          ld a, mode
+040000             0045*          rst.lil $10
+040000             0046*          ld a, mode
+040000             0047*          rst.lil $10
+040000             0048*  	endmacro
+040000             0049*  
+040000             0050*  	macro MOSCALL arg1
+040000             0051*          ld a, arg1
+040000             0052*          rst.lil $08
+040000             0053*  	endmacro
+040000             0054*  
+040000             0055*          macro SET_MODE_GCOL mode,gcolour
+040000             0056*          ld a, 18
+040000             0057*          rst.lil $10
+040000             0058*          ld a, mode
+040000             0059*          rst.lil $10
+040000             0060*          ld a, gcolour
+040000             0061*          rst.lil $10
+040000             0062*          endmacro
+040000             0063*  
+040000             0064*          macro NON_SCALED_GRAPHICS
+040000             0065*          ld a, 0
+040000             0066*          rst.lil $10
+040000             0067*          ld a, 192
+040000             0068*          rst.lil $10
+040000             0069*          ld a, 0
+040000             0070*          rst.lil $10
+040000             0071*          endmacro
+040000             0072*  
+040000             0015   
+040000             0016       .assume adl=1   ; We start up in full 24bit mode, allowing full memory access and 24-bit wide registers
+040000             0017       .org $0B0000    ; This program assembles to MOSlet RAm area
+0B0000             0018   
+0B0000             0019   
+0B0000 C3 50 00 0B 0020       jp start        ; skip headers
+0B0004             0021   
+0B0004             0022   ; Quark MOS header
+0B0004 FF FF FF FF 0023       .align 64       ; Quark MOS expects programs that it LOADs,to have a specific signature
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+0B0040             0024                       ; Starting from decimal 64 onwards
+0B0040 4D 4F 53    0025       .db "MOS"       ; MOS header 'magic' characters
+0B0043 00          0026       .db 00h         ; MOS header version 0 - the only in existence currently afaik
+0B0044 01          0027       .db 01h         ; Flag for run mode (0: Z80, 1: ADL) - We start up in ADL mode here
+0B0045             0028   
+0B0045 73 65 74 72 0029   _exec_name:     .DB  "setrtc.bin", 0      ; The executable name, only used in argv
+       74 63 2E 62 
+       69 6E 00    
+0B0050             0030   argv_ptrs_max:      EQU 16          ; Maximum number of arguments allowed in argv
+0B0050             0031   
+0B0050             0032   
+0B0050             0033   ; ---------------------------------------------
+0B0050             0034   ;
+0B0050             0035   ;   INITIAL SETUP CODE HERE
+0B0050             0036   ;
+0B0050             0037   ; ---------------------------------------------
+0B0050             0038   
+0B0050             0039   start:                      ; Start code here
+0B0050 F5          0040       push af                 ; Push all registers to the stack
+0B0051 C5          0041       push bc
+0B0052 D5          0042       push de
+0B0053 DD E5       0043       push ix
+0B0055 FD E5       0044       push iy
+0B0057 ED 6E       0045       ld a, mb                ; grab current MB to restore when exiting
+0B0059 F5          0046       push af
+0B005A AF          0047       xor a
+0B005B ED 6D       0048       ld mb, a                ; put 0 into MB
+0B005D             0049   
+0B005D             0050   
+0B005D             0051   
+0B005D DD 21 C9 01 0052       LD IX, argv_ptrs       ; The argv array pointer address
+       0B          
+0B0062 DD E5       0053       PUSH IX
+0B0064 CD 0C 01 0B 0054       CALL _parse_params     ; Parse the parameters
+0B0068 DD E1       0055       POP IX                 ; IX: argv
+0B006A 06 00       0056       LD B, 0                ;  C: argc
+0B006C 41          0057       LD B, C                ;  B: number of arguments
+0B006D 78          0058       ld a, b
+0B006E             0059   
+0B006E FE 01       0060       cp 1                    ; if only 1 param then no arguments were sent in, so nothing to set
+0B0070 CA BF 00 0B 0061       jp z, _noParams
+0B0074             0062   
+0B0074 05          0063       dec b                   ; arguments is always 1 more than we need as first is app name
+0B0075             0064   
+0B0075             0065   ; now set the params
+0B0075 FD 21 FA 01 0066       ld iy, SECONDS          ; set IY to the address of first byte to store (SECONDS)
+       0B          
+0B007A             0067   
+0B007A             0068   
+0B007A             0069   
+0B007A DD 21 C9 01 0070       LD IX, argv_ptrs       ; The argv array pointer address
+       0B          
+0B007F DD 23       0071       inc ix
+0B0081 DD 23       0072       inc ix
+0B0083 DD 23       0073       inc ix
+0B0085             0074   
+0B0085             0075   _paramLoop:                ; loop round each argument and store value
+0B0085 C5          0076       push bc
+0B0086             0077   
+0B0086             0078   
+0B0086 DD 17 00    0079       ld de, (ix)            ;   get param #B
+0B0089             0080   
+0B0089 CD E4 00 0B 0081       call string2bytePair    ; convert to BCD value needed, returned in A
+0B008D FD 77 00    0082       ld (iy), a              ; store the byte
+0B0090             0083   
+0B0090 FD 23       0084       inc iy                  ; increase destination location
+0B0092             0085   
+0B0092 DD 23       0086       inc ix
+0B0094 DD 23       0087       inc ix
+0B0096 DD 23       0088       inc ix                  ; increase three source address bytes, as three used for each pointer
+0B0098             0089   
+0B0098 C1          0090       pop bc
+0B0099 0C          0091       inc c
+0B009A 10 E9       0092       djnz _paramLoop          ; go round B times for data we want to store,
+0B009C             0093                                ; in the order of: hours minutes seconds day month year
+0B009C             0094   
+0B009C             0095   i2cSection:
+0B009C             0096   
+0B009C CD CB 00 0B 0097       call open_i2c
+0B00A0 CD D2 00 0B 0098       call writeAllData
+0B00A4 CD DF 00 0B 0099       call close_i2c
+0B00A8             0100   
+0B00A8 21 BC 01 0B 0101       ld hl, okMSG
+0B00AC CD 04 01 0B 0102       call PRSTR              ; print OK message
+0B00B0             0103   
+0B00B0             0104   now_exit:
+0B00B0             0105                               ; Cleanup stack, prepare for return to MOS
+0B00B0 F1          0106       pop af
+0B00B1 ED 6D       0107       ld mb, a                ; restore MB
+0B00B3 FD E1       0108       pop iy                  ; Pop all registers back from the stack
+0B00B5 DD E1       0109       pop ix
+0B00B7 D1          0110       pop de
+0B00B8 C1          0111       pop bc
+0B00B9 F1          0112       pop af
+0B00BA 21 00 00 00 0113       ld hl,0                 ; Load the MOS API return code (0) for no errors.
+0B00BE             0114   
+0B00BE C9          0115       ret                     ; Return to MOS
+0B00BF             0116   
+0B00BF             0117   
+0B00BF             0118   _noParams:                   ; no arguments received, so can't set anything
+0B00BF 21 60 01 0B 0119       ld hl, errMSG
+0B00C3 CD 04 01 0B 0120       call PRSTR              ; print error message
+0B00C7             0121   
+0B00C7 C3 B0 00 0B 0122       jp now_exit
+0B00CB             0123   
+0B00CB             0124   ; ---------------------------------------------
+0B00CB             0125   
+0B00CB             0126   open_i2c:
+0B00CB             0127   
+0B00CB 0E 03       0128       ld c, 3                     ; making assumption based on Jeroen's code
+0B00CD             0129       MOSCALL $1F                 ; open i2c
+0B00CD 3E 1F       0001M          ld a, arg1
+0B00CF 5B CF       0002M          rst.lil $08
+0B00D1             0130   
+0B00D1 C9          0131      ret
+0B00D2             0132   
+0B00D2             0133   ; ---------------------------------------------
+0B00D2             0134   
+0B00D2             0135   writeAllData:
+0B00D2             0136   
+0B00D2 0E 68       0137       ld c, $68               ; i2c address ($68)
+0B00D4 06 08       0138       ld b, 8                ; number of bytes to send
+0B00D6 21 F9 01 0B 0139       ld hl, PARAMS           ; location of data
+0B00DA             0140   
+0B00DA             0141       MOSCALL $21
+0B00DA 3E 21       0001M          ld a, arg1
+0B00DC 5B CF       0002M          rst.lil $08
+0B00DE             0142   
+0B00DE C9          0143       ret
+0B00DF             0144   
+0B00DF             0145   ; ---------------------------------------------
+0B00DF             0146   
+0B00DF             0147   close_i2c:
+0B00DF             0148   
+0B00DF             0149       MOSCALL $20
+0B00DF 3E 20       0001M          ld a, arg1
+0B00E1 5B CF       0002M          rst.lil $08
+0B00E3             0150   
+0B00E3 C9          0151       ret
+0B00E4             0152   
+0B00E4             0153   ; ---------------------------------------------
+0B00E4             0154   
+0B00E4             0155   string2bytePair:
+0B00E4             0156   
+0B00E4             0157   ; takes pointer to a string (0-99) and converts to a BCD single byte of two nibble values
+0B00E4             0158   
+0B00E4             0159   ; de = pointer to ASCII number
+0B00E4             0160   ; a = result
+0B00E4             0161   ; b and c are the two start chars
+0B00E4             0162   
+0B00E4 C5          0163       push bc
+0B00E5             0164   
+0B00E5 1A          0165       ld a, (de)      ; get first char
+0B00E6 47          0166       ld b, a         ; put it into B
+0B00E7 13          0167       inc de          ; inc de to next pos
+0B00E8 1A          0168       ld a, (de)      ; get the char
+0B00E9 4F          0169       ld c, a         ; put it into c
+0B00EA             0170   
+0B00EA FE 00       0171       cp 0        ; check if second char for a zero termination
+0B00EC 20 03       0172       jr nz, c1   ; jp if not, ie we got pair of chars
+0B00EE             0173   
+0B00EE 48          0174       ld c, b     ; put first char into second char
+0B00EF 06 30       0175       ld b, '0'   ; and put leading 0 into first char
+0B00F1             0176   
+0B00F1             0177   c1:
+0B00F1 79          0178       ld a, c     ; get second char
+0B00F2 D6 30       0179       sub 48      ; convert from char to value
+0B00F4 4F          0180       ld c, a     ; store it back into C
+0B00F5             0181   
+0B00F5 78          0182       ld a, b     ; get first char
+0B00F6 D6 30       0183       sub 48      ; convert from char to value
+0B00F8             0184   
+0B00F8 B7          0185       or a        ; clear any flags
+0B00F9             0186   
+0B00F9 CB 27       0187       sla a
+0B00FB CB 27       0188       sla a
+0B00FD CB 27       0189       sla a
+0B00FF CB 27       0190       sla a       ; move left 4 bits
+0B0101             0191   
+0B0101 B1          0192       or c        ; add the second nibble to it
+0B0102             0193   
+0B0102 C1          0194       pop bc
+0B0103             0195   
+0B0103 C9          0196       ret
+0B0104             0197   
+0B0104             0198   ; ---------------------------------------------
+0B0104             0199   
+0B0104             0200   PRSTR:                              ; Print a zero-terminated string
+0B0104 7E          0201       LD A,(HL)
+0B0105 B7          0202       OR A
+0B0106 C8          0203       RET Z
+0B0107 5B D7       0204       RST.LIL 10h
+0B0109 23          0205       INC HL
+0B010A 18 F8       0206       JR PRSTR
+0B010C             0207   
+0B010C             0208   ; ---------------------------------------------
+0B010C             0209   ; Parse the parameter string into a C array
+0B010C             0210   ; Parameters
+0B010C             0211   ; - HL: Address of parameter string
+0B010C             0212   ; - IX: Address for array pointer storage
+0B010C             0213   ; Returns:
+0B010C             0214   ; -  C: Number of parameters parsed
+0B010C             0215   
+0B010C             0216   _parse_params:
+0B010C 01 45 00 0B 0217       LD  BC, _exec_name
+0B0110 DD 0F 00    0218       LD  (IX+0), BC                  ; ARGV[0] = the executable name
+0B0113 DD 23       0219       INC IX
+0B0115 DD 23       0220       INC IX
+0B0117 DD 23       0221       INC IX
+0B0119 CD 45 01 0B 0222       CALL _skip_spaces               ; Skip HL past any leading spaces
+0B011D             0223   
+0B011D 01 01 00 00 0224       LD  BC, 1                       ; C: ARGC = 1 - also clears out top 16 bits of BCU
+0B0121 06 0F       0225       LD  B, argv_ptrs_max - 1        ; B: Maximum number of argv_ptrs
+0B0123             0226   
+0B0123             0227   _parse_params_1:
+0B0123 C5          0228       PUSH BC                         ; Stack ARGC
+0B0124 E5          0229       PUSH HL                         ; Stack start address of token
+0B0125 CD 4C 01 0B 0230       CALL _get_token                 ; Get the next token
+0B0129 79          0231       LD A, C                         ; A: Length of the token in characters
+0B012A D1          0232       POP DE                          ; Start address of token (was in HL)
+0B012B C1          0233       POP BC                          ; ARGC
+0B012C B7          0234       OR A                            ; Check for A=0 (no token found) OR at end of string
+0B012D C8          0235       RET Z
+0B012E             0236   
+0B012E DD 1F 00    0237       LD  (IX+0), DE                  ; Store the pointer to the token
+0B0131 E5          0238       PUSH HL                         ; DE=HL
+0B0132 D1          0239       POP DE
+0B0133 CD 45 01 0B 0240       CALL    _skip_spaces            ; And skip HL past any spaces onto the next character
+0B0137 AF          0241       XOR A
+0B0138 12          0242       LD (DE), A                      ; Zero-terminate the token
+0B0139 DD 23       0243       INC IX
+0B013B DD 23       0244       INC IX
+0B013D DD 23       0245       INC IX                          ; Advance to next pointer position
+0B013F 0C          0246       INC C                           ; Increment ARGC
+0B0140 79          0247       LD  A, C                        ; Check for C >= A
+0B0141 B8          0248       CP  B
+0B0142 38 DF       0249       JR  C, _parse_params_1          ; And loop
+0B0144 C9          0250       RET
+0B0145             0251   
+0B0145             0252   
+0B0145             0253   ; ---------------------------------------------
+0B0145             0254   
+0B0145             0255   ; Skip spaces in the parameter string
+0B0145             0256   ; Parameters:
+0B0145             0257   ; - HL: Address of parameter string
+0B0145             0258   ; Returns:
+0B0145             0259   ; - HL: Address of next none-space character
+0B0145             0260   ;    F: Z if at end of string, otherwise NZ if there are more tokens to be parsed
+0B0145             0261   
+0B0145             0262   _skip_spaces:
+0B0145 7E          0263           LD  A, (HL)                 ; Get the character from the parameter string
+0B0146 FE 20       0264               CP  ' '                 ; Exit if not space
+0B0148 C0          0265               RET NZ
+0B0149 23          0266               INC HL                  ; Advance to next character
+0B014A 18 F9       0267               JR  _skip_spaces        ; Increment length
+0B014C             0268   
+0B014C             0269   
+0B014C             0270   ; ---------------------------------------------
+0B014C             0271   
+0B014C             0272   ; Get the next token
+0B014C             0273   ; Parameters:
+0B014C             0274   ; - HL: Address of parameter string
+0B014C             0275   ; Returns:
+0B014C             0276   ; - HL: Address of first character after token
+0B014C             0277   ; -  C: Length of token (in characters)
+0B014C             0278   
+0B014C             0279   _get_token:
+0B014C 0E 00       0280       LD C, 0                         ; Initialise length
+0B014E             0281   nt:
+0B014E 7E          0282       LD A, (HL)                      ; Get the character from the parameter string
+0B014F B7          0283       OR A                            ; Exit if 0 (end of parameter string in MOS)
+0B0150 C8          0284       RET Z
+0B0151 FE 0D       0285       CP 13                           ; Exit if CR (end of parameter string in BBC BASIC)
+0B0153 C8          0286       RET Z
+0B0154 FE 20       0287       CP ' '                          ; Exit if space (end of token)
+0B0156 C8          0288       RET Z
+0B0157 23          0289       INC HL                          ; Advance to next character
+0B0158 0C          0290       INC C                           ; Increment length
+0B0159 18 F3       0291       JR  nt
+0B015B             0292   
+0B015B             0293   ; ---------------------------------------------
+0B015B             0294   
+0B015B             0295   CLS:
+0B015B 3E 0C       0296       ld a, 12
+0B015D 5B D7       0297       rst.lil $10                     ; CLS
+0B015F C9          0298       ret
+0B0160             0299   
+0B0160             0300   ; ---------------------------------------------
+0B0160             0301   ;
+0B0160             0302   ;   DATA
+0B0160             0303   ;
+0B0160             0304   ; ---------------------------------------------
+0B0160             0305   
+0B0160 53 6F 72 72 0306   errMSG:             .db "Sorry, wrong number of arguments.\r\nUse: settime seconds minutes hours day date month year\r\n",0
+       79 2C 20 77 
+       72 6F 6E 67 
+       20 6E 75 6D 
+       62 65 72 20 
+       6F 66 20 61 
+       72 67 75 6D 
+       65 6E 74 73 
+       2E 0D 0A 55 
+       73 65 3A 20 
+       73 65 74 74 
+       69 6D 65 20 
+       73 65 63 6F 
+       6E 64 73 20 
+       6D 69 6E 75 
+       74 65 73 20 
+       68 6F 75 72 
+       73 20 64 61 
+       79 20 64 61 
+       74 65 20 6D 
+       6F 6E 74 68 
+       20 79 65 61 
+       72 0D 0A 00 
+0B01BC 52 54 43 20 0307   okMSG:              .db "RTC set\r\n",0
+       73 65 74 0D 
+       0A 00       
+0B01C6 0D 0A 00    0308   LFCR:               .db "\r\n",0
+0B01C9 FF FF FF FF 0309   argv_ptrs:          .ds    48, 255        ; max 16 x 3 bytes each
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+       FF FF FF FF 
+0B01F9             0310   
+0B01F9             0311   ;   store RTC values. Send data in THIS ORDER
+0B01F9             0312   
+0B01F9 00          0313   PARAMS:         .db     0   ; this first 0 sets initial memory address to write to when sending data, always 0
+0B01FA             0314   
+0B01FA 00          0315   SECONDS:        .db     0
+0B01FB 00          0316   MINUTES:        .db     0
+0B01FC 00          0317   HOURS:          .db     0
+0B01FD             0318   
+0B01FD 00          0319   DAY:            .db     0
+0B01FE             0320   
+0B01FE 00          0321   DATE:           .db     0
+0B01FF 00          0322   MONTH:          .db     0
+0B0200 00          0323   YEAR:           .db     0
+0B0201             0324   
+0B0201             0325   
+0B0201             0326   overrun:
+0B0201 00 00 00 00 0327       .ds 32,0                   ; not used yet
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
+       00 00 00 00 
