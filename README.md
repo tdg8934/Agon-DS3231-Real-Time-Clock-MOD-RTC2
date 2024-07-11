@@ -14,3 +14,9 @@ eg.    *settime 0 23 18 2 21 7 24
 
 For 0 seconds, 23 minutes past 6pm, Tuesday July 21st 2024
 
+UPDATE - new version, 'setrtc' is more efficent at sending i2c data
+
+Usage:
+
+*setrtc seconds minutes hours day date month year
+eg.    *setrtc 0 23 18 2 21 7 24
