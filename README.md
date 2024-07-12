@@ -1,5 +1,5 @@
-eZ80 i2c assembly language example driver code for Olimex's MOD-RTC2 real time clock by Tim Gilmore July 2024
-
+eZ80 i2c assembly language example driver code for Olimex's MOD-RTC2 real time clock by Tim Gilmore and Richard Turnnidge July 2024
+Youtube video demonstrations done by Luis of Learn Agon. 
 
 UPDATE - settime MOSlet and clock.bin
 
@@ -20,3 +20,13 @@ Usage:
 
 *setrtc seconds minutes hours day date month year
 eg.    *setrtc 0 23 18 2 21 7 24
+
+UPDATE - display time and date to upper right corner of screen. Removed day of the week #1-7 to display as hh/mm/ss    mm/dd/yy
+
+Rclock.bin moslet to be placed in the MOS directory (replaces clock.bin)
+
+Usage:
+
+*rclock
+
+- Note: also working on BBC BASIC usage to run rclock - (MOD-RTC2.BAS) - more to come ....
