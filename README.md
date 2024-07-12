@@ -14,6 +14,9 @@ eg.    *settime 0 23 18 2 21 7 24
 
 For 0 seconds, 23 minutes past 6pm, Tuesday July 21st 2024
 
+*load clock.bin
+*run
+
 UPDATE - new version, 'setrtc' is more efficent at sending i2c data
 
 Usage:
@@ -21,7 +24,7 @@ Usage:
 *setrtc seconds minutes hours day date month year
 eg.    *setrtc 0 23 18 2 21 7 24
 
-UPDATE - display time and date to upper right corner of screen. Removed day of the week #1-7 to display as hh/mm/ss    mm/dd/yy
+UPDATE - rclock moslet to display time and date to upper right corner of screen. Removed day of the week #1-7 to display as hh/mm/ss    mm/dd/yy
 
 Rclock.bin moslet to be placed in the MOS directory (replaces clock.bin)
 
