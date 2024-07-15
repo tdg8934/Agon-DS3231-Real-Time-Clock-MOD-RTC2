@@ -26,6 +26,7 @@ eg.    *setrtc 0 23 18 2 21 7 24
 
 UPDATE - rclock moslet to display time and date to upper right corner of screen. Removed day of the week #1-7 to display as hh/mm/ss    mm/dd/yy
 
+
 Rclock.bin moslet to be placed in the MOS directory (replaces clock.bin)
 
 Usage:
@@ -33,3 +34,10 @@ Usage:
 *rclock
 
 - Note: also working on BBC BASIC usage to run rclock - (MOD-RTC2.BAS) - more to come ....
+
+- Update - cleaned up rclock.asm unneaded routines. created rtime.bin and rdate.bin files for /MOS directory as moslets. In associated asm files, moved EQU for rtime and rdate x,y screen positions
+
+- Usage: (delete previous versions of rtime.bin and rdate.bin from /mos and copy in new assembled or github versions for moslets
+- *rtime
+- *rdate
+- *rclock
